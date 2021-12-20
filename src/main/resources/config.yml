@@ -1,0 +1,8 @@
+# Percentage of players that have to be sleeping to skip a night
+percentage: 50.0
+
+# Amount of ticks for the transition. User 0 to skip without transition.
+duration:
+  evening: 100
+  midnight: 75
+  morning: 50
