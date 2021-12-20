@@ -10,6 +10,6 @@ author: TurtleException
 website: https://github.com/TurtleException/QuotaSleep
 
 commands:
-  click:
+  quotasleep:
     description: Reloads the plugin config and refreshes all worlds.
     usage: /quotasleep reload

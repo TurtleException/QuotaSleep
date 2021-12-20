@@ -1,11 +1,17 @@
 package de.eldritch.spigot;
 
+import de.eldritch.spigot.command.GeneralCommand;
+import de.eldritch.spigot.command.GeneralTabCompleter;
 import de.eldritch.spigot.util.Runnable;
+import net.md_5.bungee.api.ChatMessageType;
+import net.md_5.bungee.api.chat.TextComponent;
+import org.bukkit.GameRule;
 import org.bukkit.World;
 import org.bukkit.configuration.InvalidConfigurationException;
 import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.entity.Player;
 import org.bukkit.plugin.java.JavaPlugin;
+import org.jetbrains.annotations.NotNull;
 
 import java.io.File;
 import java.io.IOException;
@@ -34,9 +40,10 @@ public class QuotaSleep extends JavaPlugin {
         reload();
         getServer().getPluginManager().registerEvents(new EventListener(), this);
         try {
-            Objects.requireNonNull(getCommand("quotasleep reload")).setExecutor(new ReloadCommand());
+            Objects.requireNonNull(getCommand("quotasleep")).setExecutor(new GeneralCommand());
+            Objects.requireNonNull(getCommand("quotasleep")).setTabCompleter(new GeneralTabCompleter());
         } catch (NullPointerException e) {
-            getLogger().log(Level.WARNING, "Unable to register command 'quotasleep reload'.", e);
+            getLogger().log(Level.WARNING, "Unable to register command.", e);
         }
 
         refreshAll();
@@ -49,16 +56,41 @@ public class QuotaSleep extends JavaPlugin {
     public void refresh(World world) {
         if (!world.isNatural()) return;
 
+        if (gameRuleOverride(world)) return;
+
         int sleeping = 0;
+        int required = 0;
         for (Player player : world.getPlayers()) {
             if (player.isSleeping()) {
                 sleeping++;
             }
         }
 
-        if (shouldSkip(sleeping, world.getPlayers().size())) {
-            int duration = getDuration(sleepEnd(world) - world.getTime());
-            LinkedList<Long> ticks = getTickValues(world.getTime(), sleepEnd(world), duration);
+        if (sleeping > 0) {
+            required = (int) (getPercentageRequired() / 100 * world.getPlayers().size());
+
+            String message;
+            if (required - sleeping > 1) {
+                message = "§6" + (required - sleeping) + " §7more players required to skip sleeping. §8(" + getPercentageRequired() + "%)";
+            } else if (required - sleeping == 1) {
+                message = "§6One §7more player required to skip sleeping. §8(" + getPercentageRequired() + "%)";
+            } else {
+                message = "§7Skipping sleep...";
+            }
+            getServer().getScheduler().runTaskLater(this, () -> {
+                for (Player player : world.getPlayers()) {
+                    player.spigot().sendMessage(ChatMessageType.ACTION_BAR, TextComponent.fromLegacyText(message));
+                }
+            }, 20L);
+        }
+
+        if (sleeping >= required && required != 0) {
+            int duration = getDuration(24000L - world.getTime());
+            LinkedList<Long> ticks = getTickValues(world.getTime() + 21L, duration);
+
+            getLogger().info("Skipped sleeping in world '" + world.getName() + "' from tick, because " + sleeping
+                    + " of " + world.getPlayers().size() + " players were sleeping (" + getPercentageRequired()
+                    + "% required).");
 
             Runnable runnable = new Runnable() {
                 @Override
@@ -66,12 +98,23 @@ public class QuotaSleep extends JavaPlugin {
                     if (canSleep(world) && !ticks.isEmpty()) {
                         world.setTime(ticks.removeFirst());
                     } else {
+                        world.setThundering(false);
+                        world.setStorm(false);
                         cancel();
                     }
                 }
             };
-            runnable.setId(getServer().getScheduler().scheduleSyncRepeatingTask(this, runnable, 0L, 1L));
+            runnable.setId(getServer().getScheduler().scheduleSyncRepeatingTask(this, runnable, 20L, 1L));
         }
+    }
+
+    /**
+     * Checks whether sleeping should be ignored in a {@link World} because of a {@link GameRule}.
+     * @param world World to check.
+     * @return true if the world should be ignored.
+     */
+    private boolean gameRuleOverride(World world) {
+        return Boolean.FALSE.equals(world.getGameRuleValue(world.isThundering() ? GameRule.DO_WEATHER_CYCLE : GameRule.DO_DAYLIGHT_CYCLE));
     }
 
     /**
@@ -89,14 +132,16 @@ public class QuotaSleep extends JavaPlugin {
         // define config defaults
         try {
             YamlConfiguration defaults = new YamlConfiguration();
-            defaults.load(new InputStreamReader(Objects.requireNonNull(this.getClass().getResourceAsStream("config.yml"))));
+            defaults.load(new InputStreamReader(Objects.requireNonNull(this.getClass().getClassLoader().getResourceAsStream("config.yml"))));
             getConfig().setDefaults(defaults);
+            getConfig().options().copyDefaults(true);
         } catch (IOException | InvalidConfigurationException | NullPointerException e) {
             getLogger().log(Level.WARNING, "Unable to load config defaults.", e);
         }
 
         // load config file
         try {
+            configFile.createNewFile();
             getConfig().load(configFile);
         } catch (IOException | InvalidConfigurationException e) {
             getLogger().log(Level.WARNING, "Unable to load config from file.", e);
@@ -111,13 +156,11 @@ public class QuotaSleep extends JavaPlugin {
     }
 
     /**
-     * Checks whether the amount of players sleeping is enough to skip a night.
-     * @param sleeping Amount of sleeping players.
-     * @param players Total amount of players.
-     * @return true if the night should be skipped.
+     * Get the required percentage of players sleeping to skip.
+     * @return Required percentage of sleeping players.
      */
-    private boolean shouldSkip(int sleeping, int players) {
-        return ((double) (sleeping / players) >= getConfig().getDouble("percentage", 50.0));
+    private double getPercentageRequired() {
+        return getConfig().getDouble("percentage", 50.0);
     }
 
     /**
@@ -127,26 +170,26 @@ public class QuotaSleep extends JavaPlugin {
      * @return Amount of iterations for the transition.
      */
     private int getDuration(long time) {
-        if (time < 4000)
-            return getConfig().getInt("duration.evening", 100);
-        if (time < 8000)
+        if (time > 8000L)
             return getConfig().getInt("duration.midnight", 75);
+        if (time > 4000L)
+            return getConfig().getInt("duration.evening", 100);
         return getConfig().getInt("duration.morning", 50);
     }
 
     /**
-     * Provides a {@link LinkedList} of tick values for a smooth transition between two specified tick values.
+     * Provides a {@link LinkedList} of tick values for a smooth transition until the next morning.
      *
-     * @param from The time from wich the list should start.
-     * @param to The time at wich the list should stop
-     * @param ticks The amount of ticks for the transition.
-     * @return List of length ticks + 1 with time values between from and to.
+     * @param from The time from wich the transition should start.
+     * @param ticks The amount of ticks for the transition (will be greater by 1).
+     * @return List of time values.
      */
-    private LinkedList<Long> getTickValues(long from, long to, int ticks) {
-        long diff = to - from;
+    private @NotNull LinkedList<Long> getTickValues(long from, int ticks) {
+        long diff = (long) 24000 - from;
         LinkedList<Long> val = new LinkedList<>();
-        for (int i = 0; i <= ticks; i++)
-            val.add((long) (((Math.sin(3D * ((double) i / (double) ticks) - 0.5D * Math.PI) + 1D) / 2D) * diff + from));
+        for (int i = 0; i < ticks; i++)
+            val.add((long) (((Math.sin(3D * ((double) i / (double) ticks) - 0.5D * Math.PI) + 1D) / 2D) * (double) diff + (double) from));
+        val.add(24000L);
         return val;
     }
 
@@ -157,37 +200,16 @@ public class QuotaSleep extends JavaPlugin {
      * @param world {@link World} that should be checked.
      * @return true if it is currently possible to sleep.
      */
-    private boolean canSleep(World world) {
+    private boolean canSleep(@NotNull World world) {
         if (world.isClearWeather()) {
             // clear weather
-            return (12542 < world.getTime()) && (world.getTime() < 23459);
+            return 12542 < world.getTime();
         } else if (world.isThundering()) {
             // thunder
             return true;
         } else {
             // rain
-            return (12010 < world.getTime()) && (world.getTime() < 23991);
-        }
-    }
-
-    /**
-     * The time when the night / thunderstorm is over.
-     * <p>Values taken from <code>https://minecraft.fandom.com/wiki/Bed</code>.
-     *
-     * @param world {@link World} that should be checked.
-     * @return Time in ticks.
-     */
-    private long sleepEnd(World world) {
-        if (world.isClearWeather()) {
-            // clear weather
-            return 23459L;
-        } else if (world.isThundering()) {
-            // thunder
-            long ticks = world.getTime() + world.getWeatherDuration();
-            return (ticks < 24000) ? ticks : (ticks - 24000L);
-        } else {
-            // rain
-            return 23991L;
+            return 12010 < world.getTime();
         }
     }
 }
