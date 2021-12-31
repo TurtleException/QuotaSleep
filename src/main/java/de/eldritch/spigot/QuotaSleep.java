@@ -67,7 +67,7 @@ public class QuotaSleep extends JavaPlugin {
         }
 
         if (sleeping > 0) {
-            required = (int) (getPercentageRequired() / 100 * world.getPlayers().size());
+            required = (int) (getPercentageRequired() / 100.0 * (double) world.getPlayers().size());
 
             String message;
             if (required - sleeping > 1) {
