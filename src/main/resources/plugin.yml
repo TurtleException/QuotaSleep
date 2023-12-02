@@ -1,15 +1,12 @@
+# noinspection YAMLSchemaValidation
 name: ${project.artifactId}
+# noinspection YAMLSchemaValidation
 main: ${project.groupId}.${project.artifactId}
 version: ${project.version}
 
-api-version: 1.18
+api-version: 1.20
 
 description: A simple plugin to skip nights with only a portion of players sleeping.
 
 author: TurtleException
 website: https://github.com/TurtleException/QuotaSleep
-
-commands:
-  click:
-    description: Reloads the plugin config and refreshes all worlds.
-    usage: /quotasleep reload
