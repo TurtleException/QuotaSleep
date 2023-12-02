@@ -100,7 +100,7 @@ public class QuotaSleep extends JavaPlugin {
         long diff = 24000 - start;
         long[] val = new long[steps + 1];
         for (int i = 0; i < steps; i++)
-            val[i] = (long) ((((Math.sin(3D * (double) i / (double) steps) - 0.5D * Math.PI) + 1D) / 2D) * (double) diff + (double) start);
+            val[i] = (long) (((Math.sin(3D * ((double) i / (double) steps) - 0.5D * Math.PI) + 1D) / 2D) * (double) diff + (double) start);
         val[steps] = 24000L;
         return val;
     }
