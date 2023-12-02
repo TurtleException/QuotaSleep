@@ -83,6 +83,13 @@ public class QuotaSleep extends JavaPlugin {
 
                 getServer().getScheduler().runTaskLater(this, () -> world.setTime(time), i + 1);
             }
+
+            if (changeWeather) {
+                getServer().getScheduler().runTaskLater(this, () -> {
+                    world.setThundering(false);
+                    world.setStorm(false);
+                }, ticks.length / 2);
+            }
         } else if (changeWeather) { // else because weather would be changed during the time transition
             world.setThundering(false);
             world.setStorm(false);
