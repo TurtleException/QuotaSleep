@@ -44,7 +44,7 @@ public class QuotaSleep extends JavaPlugin {
 
         int    totalPlayers = world.getPlayers().size();
         int sleepingPlayers = (int) world.getPlayers().stream().filter(LivingEntity::isSleeping).count();
-        int requiredPlayers = (int) (totalPlayers * QuotaSleep.fraction);
+        int requiredPlayers = Math.max((int) (totalPlayers * QuotaSleep.fraction), 1);
         int  missingPlayers = requiredPlayers - sleepingPlayers;
 
         boolean changeWeather;
