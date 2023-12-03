@@ -52,18 +52,21 @@ public class QuotaSleep extends JavaPlugin {
 
         if (world.isClearWeather()) {
             changeWeather = false;
-            changeTime    = (world.getTime() > 12542);
+            changeTime    = (world.getTime() > 12542 && world.getTime() < 23459);
         } else if (world.isThundering()) {
             changeWeather = true;
             changeTime    = true;
         } else {
             changeWeather = true;
-            changeTime    = (world.getTime() > 12010);
+            changeTime    = (world.getTime() > 12010 && world.getTime() < 23991);
         }
 
         // gamerule overrides
         if (!grDaylightCycle) changeTime    = false;
         if (!grWeatherCycle)  changeWeather = false;
+
+        // abort here to not show messages
+        if (!changeTime && !changeWeather) return;
 
         if (missingPlayers > 1) {
             broadcast(world, "§6" + missingPlayers + " §7more players required to skip sleeping. §8(" + (fraction * 100) + "%)");
@@ -90,7 +93,7 @@ public class QuotaSleep extends JavaPlugin {
                     world.setStorm(false);
                 }, ticks.length / 2);
             }
-        } else if (changeWeather) { // else because weather would be changed during the time transition
+        } else { // else because weather would be changed during the time transition
             world.setThundering(false);
             world.setStorm(false);
         }
